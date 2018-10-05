@@ -1,136 +1,211 @@
-%% main.m
-% Tyler Glass
-% Code for running f19 fit experiments
-
-%% Initialize Workspace
-clear; clc; close all
+%% Initialize
+clear;clc;
 home = pwd;
-addpath('./functions') % Add path for f19 processing functions
 
-%% Get Data for First and Last PFP Times
-first_last_PFP_data = load('first_last_PFP.txt');
-patientNumbers = first_last_PFP_data(1,:);
-first_PFP = first_last_PFP_data(2,:);
-last_PFP = first_last_PFP_data(3,:);
+%% Subject Groups
+all = ['13A','13B','18A','18B','28A','28B','32A','32B','33A','33B','42A','42B'];
+normals = [2;3;4;5;15;16;17;19;26;31;37;39;40;41];
+mild = [9;13;18;20;24;25;28;29;30;32;33;35];
+moderate = [7;8;10;12;14;34];
 
-% background signal info 
-BGD = [5.32985	6.0345	5.8718	6.14255	5.8982	5.88445	5.98415	5.86475	5.78295	6.48255	5.978	5.85025	4.8496	4.8497	4.9275	4.92565 ...
-    4.8934	4.84835	10.8336	7.98885	9.33085	9.66375	9.6091	9.76625	9.6471];
+%% Choose Parameters for Running
+% Choose patients
+patients = ['111']; %;'013B';'018A';'028A'];
+% patients = ['033B'];
+% MIP image - 2 1
+PlotMIPImageBool = 1;
+SaveMIPImageBool = 1;
+% RGB Image - figure 2
+PlotRGBImageBool = 1;
+SaveRGBImageBool = 1;
+% Six Segment Image - figure 3
+PlotSixSegmentModelBool = 0; 
+SaveSixSegmentModelBool =0;
+% F19 histogram image - figure 4
+PlotF19HistogramBool = 1; 
+% Save CSV ventilation data to file
+WriteCSVVentilationDataBool = 1;
+% Save tau1 data to file
+WriteTau1DataBool = 1;
 
-
-
-%% Select Patients for Experiment to Run
-%ExperimentName  = 'd0_constant';
-%FigureDirectory    = strcat('../../f19_fit_results/',ExperimentName,'/figures/');    mkdir(FigureDirectory);
-%ParameterDirectory = strcat('../../f19_fit_results/',ExperimentName,'/parameters/'); mkdir(ParameterDirectory);
-
-Control = [ 2; 3; 4;  5; 11; 15; 16; 17]; % check on 19,20
-Exper   = [ 7; 8; 9; 10; 12; 13; 14; 18; 19; 20]; % not sure on 19,20 but both look normal
-
-% Set up counters for control and exper
-ControlCount = 1;
-ExperCount = 1;
-
-%% Selected Image Data
-f19_pixel_size = 0.625; % cm
-f19_slice_thickness = 1.5; % cm
-anatomic_pixel_size = 0.3125; % cm
-anatomic_slice_thickness = 1.5; % cm
-
-%% Loop Through all F19 Patients
-tic
-for i=1:length(patientNumbers)
-    %% Load F19 Data
-    cd('G:\2017-Glass\mim\f19_ventilation_segmentations')
-    filename = strcat('0509-',num2str(patientNumbers(i),'%03d'),'.mat');
-    load(filename); roi = roi; image = image; 
+%% Loop through selected subjects
+for i = 1:size(patients,1)
+    %% Load and Format Initial Imaging Data
+    % load f19 ventilaion
+    %cd('G:\2017-Glass\mim\f19_ventilation_segmentations')
+    cd('.\data')
+    filename = strcat('2569-',patients(i,:),'_f19.mat');
+    load(filename);
+    % format fixed F19 image to same size as moving 1h mri
+    fixed = imresize(roi,[128,128]);
     cd(home)
     
-    %% Load Anatomic MRI
-    cd('G:\2017-Glass\mim\inspiration_anatomic_segmentations')
-    filename = strcat('0509-',num2str(patientNumbers(i),'%03d'),'.mat');
-    load(filename); inspiration = inspiration; inspiration_ROI = inspiration_ROI; 
+    % load anatomical 1h mri
+    cd('.\data')
+  
+        filename = strcat('2569-',patients(i,:),'_anat.mat');
+        load(filename)
+    % format anatomical 1h mri moving image
+    moving = imresize(inspiration_ROI, [128,128]);
+    moving(:,:,16:18) = 0; % add slices to make equal image sizes
+    
+    % back to home directory and add functions path
     cd(home)
-    
-    %fprintf('\n\n\nStarting Patient %03d', patientNumbers(i))
-    
-    % Process Normal Fit
-    %[tau1_normal , tau2_normal , r2_normal , mask ] = NormalFitProcess( image , roi , scantimes , last_PFP(i) );
-    
-    %Process Split Fit
-    %[ dF , tau1 , r2_Washin , d0 , tau2 , r2_Washout ] =  SplitFitProcess( image , roi , scantimes , first_PFP(i), last_PFP(i) );
-    
-    % Plot Results
-    %PlotSplitFitResultsv2( patientNumbers(i), FigureDirectory, tau1, tau2, dF, d0, r2_Washin, r2_Washout, mask )
-    
-    % Save Parameters
-    %SaveFitParameterData(patientNumbers(i), ParameterDirectory, tau1, tau2, dF, d0)
-    %VentilationVolumeLiters(i,1) = patientNumbers(i);
-    
-    %% Resize segmentations to image dimensions
-    Mask = imresize(roi,[64,64]); % f19
-    inspiration_roi = imresize(inspiration_ROI,[128,128]); % anatomic
-    
-    %% Compute F19 volumes and apex base measurements
-    VentilationVolumeLiters(i) = sum(Mask(:))*f19_pixel_size*f19_pixel_size*f19_slice_thickness/1e3;
-    Ventilation_ApexBase(i) = ComputeApexBaseMeasurement(Mask, f19_pixel_size);
-    Ventilation_AnteriorPosterior(i) = ComputeAntPostMeasurement(Mask, f19_slice_thickness);
-    Ventilation_LeftRight(i) = ComputeLeftRightMeasurement(Mask, f19_pixel_size);
-    
-    %% Compute anatomic volumes and apex base measurements
-    AnatomicVolumeLiters(i) = sum(inspiration_roi(:))*anatomic_pixel_size*anatomic_pixel_size*anatomic_slice_thickness/1e3;
-    Anatomic_ApexBase(i) = ComputeApexBaseMeasurement(inspiration_roi, anatomic_pixel_size);
-    Anatomic_AnteriorPosterior(i) = ComputeAntPostMeasurement(inspiration_roi, anatomic_slice_thickness);
-    Anatomic_LeftRight(i) = ComputeLeftRightMeasurement(inspiration_roi, anatomic_pixel_size);
-    
-    slice1 = image(:,:,:,1);
-    FirstSlice_Mean(i) = mean(slice1(:));
-    FirstSliceSTD(i) = std(slice1(:));
-    
-    sliceEnd = image(:,:,:,end);
-    lastSlice_Mean(i) = mean(sliceEnd(:));
-    lastSliceSTD(i) = std(sliceEnd(:));
-    
-    
-    
-    % Compute 
-    
-%     % Compute Slow Washins
-%     [SlowFillingVolumes(i) , SlowFillingPercentages(i) ] = ComputeSlowFillingVolumes(image, roi, first_PFP(i) , patientNumbers(i) , 2 , 11); % 2 washin cycles, threshold 11
-%     
-%     % Compute Gas Trapping
-%     [GasTrappingVolumes(i) , GasTrappingPercentages(i) ] = ComputeGasTrappingVolumes(image, roi, last_PFP(i)  , patientNumbers(i) , 3 , 11); % 3 washout cycles, threshold 11
-%     
-%     % Compute Total Ventilation Number
-%     MaximumValsImage = max(image,[],4);
-%     TotalVentilationVolume = Mask.*MaximumValsImage;
-%     TotalVentilation(i) = sum(TotalVentilationVolume(:))*6.25*6.25*15/1e6;
-%     
-%     % Compute Stats
-%     if ismember(patientNumbers(i),Control)
-%         Control_VentilationVolume(ControlCount) = VentilationVolumeLiters(i);
-%         Control_SlowFillPercent(ControlCount) = SlowFillingPercentages(i);
-%         Control_TrapPercent(ControlCount) = GasTrappingPercentages(i);
-%         ControlCount = ControlCount + 1;
-%     elseif ismember(patientNumbers(i),Exper)
-%         Exper_VentilationVolume(ExperCount) = VentilationVolumeLiters(i);
-%         Exper_SlowFillPercent(ExperCount) = SlowFillingPercentages(i);
-%         Exper_TrapPercent(ExperCount) = GasTrappingPercentages(i);
-%         ExperCount = ExperCount + 1;
-%     end
+    addpath('./functions')
        
+    %% Stretch moving to match respiratory effort of fixed
+    [moving ApexBaseStretchRatio(i) LeftRightStretchRatio(i)] = Stretch_Functional3D(moving,fixed);
     
+    %% Use Translation Registration to Align Images
+    [optimizer, metric] = imregconfig('monomodal');
+    MOVING_transformed = imregister(uint8(moving), uint8(fixed), 'translation', optimizer, metric);
+    
+    %% Remove end slices from registered anatomic outline
+    MOVING_transformed = RemoveEdgeSlices(MOVING_transformed);
+       
+    %% Format MIP Image
+    f19_RAW = image;
+    MIP = max(image,[],4);
+    clear image % to avoid variable name confusion
+    MIP = imresize(MIP,[128,128]);    
+    % Select only MIP inside anatomic
+    f19_lung = MIP.*double(MOVING_transformed);
+    
+    %% Plot F19 Histogram on Figure 4 if selected
+    if PlotF19HistogramBool
+        [P90data(i) , meantop10data(i)] = PlotF19Histogram(patients(i,:), f19_lung);
+    end
+    
+    %% Compute Values for lowvent, midvent, highvent
+    [low_vent(i), mid_vent(i), high_vent(i), max_vent(i)] = FindMIPThresholdValues(MIP , f19_lung);
+    
+    %% Plot MIP Image on Figure 1 if Selected
+    if PlotMIPImageBool
+        PlotMIPImage(patients(i,:), SaveMIPImageBool, f19_lung, low_vent(i), high_vent(i))
+    end
+    
+    %% Create and Plot RGB Maps on Figure 2 if selected
+    [f19_rgb , UnventilatedMap ,  LowVentMap , MiddleVentMap , HighVentMap] = PlotRGB_f19(patients(i,:),PlotRGBImageBool,SaveRGBImageBool,f19_lung, 0.5, low_vent(i), mid_vent(i), high_vent(i));
+    
+    %% Create 6 Segment Model and Compute Volumes of Segments
+    [ UpperLeft, MiddleLeft, LowerLeft, UpperRight, MiddleRight, LowerRight ] = ComputeSixLungSegments( MOVING_transformed );
+    UpperLeftVolumes(i)   = sum(UpperLeft(:)  )*.3125*.3125*1.5;
+    MiddleLeftVolumes(i)  = sum(MiddleLeft(:) )*.3125*.3125*1.5;
+    LowerLeftVolumes(i)   = sum(LowerLeft(:)  )*.3125*.3125*1.5;
+    UpperRightVolumes(i)  = sum(UpperRight(:) )*.3125*.3125*1.5;
+    MiddleRightVolumes(i) = sum(MiddleRight(:))*.3125*.3125*1.5;
+    LowerRightVolumes(i)  = sum(LowerRight(:) )*.3125*.3125*1.5;
+    
+    %% Plot Six Segment Model on Figure 3 if Selected
+    if PlotSixSegmentModelBool
+        PlotSixLungSegmentsRGB(patients(i,:) , SaveSixSegmentModelBool,UpperLeft, MiddleLeft, LowerLeft, UpperRight, MiddleRight, LowerRight)
+    end
+    
+    %% Return home
+    cd(home)
+    
+    %% Compute Ventilated Volumes By Type
+    AnatomicVolumes(i)         = sum(MOVING_transformed(:))*0.3125*0.3125*1.5;
+    UnventilatedVolumes(i)     = sum(UnventilatedMap(:))   *0.3125*0.3125*1.5;
+    LowVentilatedVolumes(i)    = sum(LowVentMap(:))        *0.3125*0.3125*1.5;
+    MiddleVentilatedVolumes(i) = sum(MiddleVentMap(:))     *0.3125*0.3125*1.5;
+    HighVentilatedVolumes(i)   = sum(HighVentMap(:))       *0.3125*0.3125*1.5;
+    
+    %% Compute Washin and Washout Dynamics
+    if WriteTau1DataBool
+        % load data for First and Last PFP Times
+        first_last_PFP_data = load('first_last_PFP.txt');
+        first_PFP = first_last_PFP_data(2,:);
+        last_PFP = first_last_PFP_data(3,:);
+        % print when starting
+        fprintf('\n\n\nStarting Patient %03d', patients(i,:))
+        % Get mask for ventilated pixels from MIIT using threshold
+        ROI_VentilationDynamics = f19_lung > low_vent(i);
+        % Process Split Fit
+%         [ dF , tau1 , r2_Washin , d0 , tau2 , r2_Washout ] =  SplitFitProcess( f19_RAW , ROI_VentilationDynamics , scantimes , first_PFP(i), last_PFP(i) );
+        % Normal Fit Process
+        [ tau1 , tau2 , r2 , mask, d0 , dF, t0 , t1] = NormalFitProcessAllOutput( f19_RAW , roi , scantimes , last_PFP(i) );
+        % Get mask variable
+        [ PixelAverageMeans , mask ] = ComputePixelAverageIn3DROI( f19_RAW, ROI_VentilationDynamics );
+                %% Boolean Tau_1 filter
+        for fix=1:1:64 
+            for fiy=1:1:64
+                for fiz=1:1:18
+                    if (tau1(fix,fiy,fiz) < tau2(fix,fiy,fiz)*0.75) || (tau1(fix,fiy,fiz) > 590)|| (tau1(fix,fiy,fiz) < 5)
+                        tau1(fix,fiy,fiz) = 0;
+                        tau2(fix,fiy,fiz) = 0;
+                    end
+                    if (tau2(fix,fiy,fiz) < 5) ||(tau2(fix,fiy,fiz) > 590)
+                        tau1(fix,fiy,fiz) = 0;
+                        tau2(fix,fiy,fiz) = 0;
+                    end
+                end
+            end
+        end
+        
+        %% plot and save tau maps
+        figure
+        for p = 1:1:18
+            %    figure
+            subplot(4,5,p)
+            image(tau1(:,:,p))
+            title('Tau 1')
+        end
+        %         mkdir('./outputs/f19_tau_figures/');
+        %         PatientTitle = strcat('Patient_',num2str(patients(i,:),'_Tau1','%03d'));
+        %         saveas(gcf,strcat('./outputs/f19_tau_figures/',PatientTitle,'.png'))
+        
+        figure
+        for q = 1:1:18
+            %    figure
+            subplot(4,5,q)
+            image(tau2(:,:,q))
+            title('Tau 2')
+        end
+        
+%         mkdir('./outputs/f19_tau_figures/');
+%         PatientTitle = strcat('Patient_',num2str(patients(i,:),'_Tau1','%03d'));
+%         saveas(gcf,strcat('./outputs/f19_tau_figures/',PatientTitle,'.png'))
+        %%
+        % Plot Results
+%         PlotSplitFitResultsv2( patients(i,:), './outputs/f19_fit_figures/', tau1, tau2, dF, d0, r2_Washin, r2_Washout, mask )
+       
+        % Save Parameters
+%         SaveFitParameterData(patients(i,:), './outputs/f19_fit_parameters/', tau1, tau2, dF, d0)
+    end
+    
+    %% Output .csv format table
+[data] = xyz_show(mask,imresize(MIP,[64,64]),tau1,tau2,d0,dF,t0,t1,patients(i,:));
 end
 
-Ventilation_AnteriorPosterior'
-Anatomic_AnteriorPosterior'
+VDP = (100*UnventilatedVolumes./AnatomicVolumes)'
+meanVDP = mean(VDP)
+stdVDP  = std(VDP)
+LVP = (100*(UnventilatedVolumes+LowVentilatedVolumes)./AnatomicVolumes)';
+meanLVP = mean(LVP)
+stdLVP  = std(LVP)
+max_vent';
+meanMaxVent = mean(max_vent)
 
-% loop for stats
-%[h_ventVolu , p_ventVolu] = ttest2(Control_VentilationVolume , Exper_VentilationVolume , 'Vartype','unequal')
-%[h_trapPerc , p_TrapPerc] = ttest2(Control_TrapPercent , Exper_TrapPercent , 'Vartype','unequal' )
-%[h_slowFPer , p_slowFPer] = ttest2(Control_TrapPercent , Exper_TrapPercent , 'Vartype','unequal' )
-%[h_trapNorm , p_TrapNorm] = ttest2(Control_TrapNormalized , Exper_TrapNormalized , 'Vartype','unequal' )
+%% Write Ventilation Data to CSV if Selected
+if WriteCSVVentilationDataBool
+    % create data matrix
+    f19DataMatrix = [string(patients) AnatomicVolumes' UnventilatedVolumes' LowVentilatedVolumes' MiddleVentilatedVolumes' HighVentilatedVolumes'...
+                     100*UnventilatedVolumes'./AnatomicVolumes' 100*LowVentilatedVolumes'./AnatomicVolumes' ...
+                     100*MiddleVentilatedVolumes'./AnatomicVolumes' 100*HighVentilatedVolumes'./AnatomicVolumes'];
+    % make header
+    cHeader = {'PatientNumber' 'AnatomicVolume(mL)' 'UnventilatedVolume(mL)' 'LowVentVolume(mL)' 'MediumVentVolume(mL)' 'HighVentVolume(mL)' 'Unventilated%' 'LowVent%' 'MediumVent%' 'HighVent%' };
+    commaHeader = [cHeader;repmat({','},1,numel(cHeader))]; %insert commaas
+    commaHeader = commaHeader(:)';
+    textHeader = cell2mat(commaHeader); %cHeader in text with commas
+    %write header to file
+    fid = fopen('.\outputs\F19ventilationdata.csv','a');
+    % 'w' overwrite data
+    % 'a' append data
+    fprintf(fid,'%s\n',textHeader);
+    for index = 1:size(patients,1)
+        fprintf(fid,'%s,%f,%f,%f,%f,%f,%f,%f,%f,%f\n',f19DataMatrix(index,:));
+    end
+    fclose(fid);
+end
 
-toc
-
-%SlowFillingPercentages'
